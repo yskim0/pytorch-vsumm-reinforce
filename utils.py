@@ -88,7 +88,34 @@ def write_json(obj, fpath):
         json.dump(obj, f, indent=4, separators=(',', ': '))
 
 
+def init_expr_path(expr_name):
+    dir_path = [
+            '/data/project/rw/video_summarization/dataset/exp1_Order/',
+            '/data/project/rw/video_summarization/dataset/exp2_ConcatRatio_and_Type/',
+            '/data/project/rw/video_summarization/dataset/exp3_VideoLength/'
+        ]
 
+    exp1_datasets=["vip_summe_inorder_length_25_9000", "vip_summe_reversed_length_25_9000",
+                            "vip_tvsum_inorder_length_25_9000", "vip_tvsum_reversed_length_25_9000"]
+    exp2_datasets=["vip_summe_inorder_wsr_25_9000", "vip_summe_inorder_length_94_9000", "vip_summe_inorder_wsr_94_9000", "vip_summe_inorder_length_88_9000",
+                "vip_summe_inorder_wsr_88_9000", "vip_summe_inorder_length_70_9000", "vip_summe_inorder_wsr_70_9000", "vip_summe_inorder_length_40_9000",
+                "vip_summe_inorder_wsr_40_9000", "vip_tvsum_inorder_wsr_25_9000", "vip_tvsum_inorder_length_94_9000", "vip_tvsum_inorder_wsr_94_9000", 
+                "vip_tvsum_inorder_length_88_9000", "vip_tvsum_inorder_wsr_88_9000", "vip_tvsum_inorder_length_70_9000", "vip_tvsum_inorder_wsr_70_9000",
+                "vip_tvsum_inorder_length_40_9000", "vip_tvsum_inorder_wsr_40_9000"]
+    exp3_datasets=["vip_summe_inorder_wsr_25_3000", "vip_summe_inorder_wsr_25_15000",
+                    "vip_tvsum_inorder_wsr_25_3000", "vip_tvsum_inorder_wsr_25_15000"]
+           
 
+    if expr_name == "exp1":
+        base_dir = dir_path[0]
+        datasets = exp1_datasets
+    elif expr_name == "exp2":
+        base_dir = dir_path[1]
+        datasets = exp2_datasets
+    elif expr_name == "exp3":
+        base_dir = dir_path[2]
+        datasets = exp3_datasets
+    else:
+        raise NotImplementedError("only implemented exp1, exp2, exp3")
 
-
+    return base_dir, datasets

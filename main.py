@@ -7,6 +7,8 @@ import h5py
 import time
 import datetime
 import numpy as np
+import glob
+import pandas as pd
 from tabulate import tabulate
 
 import torch
@@ -23,8 +25,6 @@ import vsum_tools
 parser = argparse.ArgumentParser("Pytorch code for unsupervised video summarization with REINFORCE")
 # Dataset options
 parser.add_argument('--expr', type=str, required=True, choices = ['exp1', 'exp2', 'exp3'], help="experiments type : ['exp1', 'exp2', 'exp3']")
-parser.add_argument('-m', '--metric', type=str, required=True, choices=['tvsum', 'summe'],
-                    help="evaluation metric ['tvsum', 'summe']")
 # Model options
 parser.add_argument('--input-dim', type=int, default=1024, help="input dimension (default: 1024)")
 parser.add_argument('--hidden-dim', type=int, default=256, help="hidden unit dimension of DSN (default: 256)")
@@ -69,12 +69,12 @@ def main():
         print("Currently using CPU")
     
     base_dir, datasets = init_expr_path(args.expr)
+    if args.verbose: table = [["No.", "Video", "F-score"]]
 
     for i, file_name in enumerate(datasets):
         h5_path = os.path.join(base_dir, f'{file_name}.h5')
         save_dir = f'{args.expr}/{file_name}'
         os.makedirs(save_dir, exist_ok=True)
-        os.makedirs(os.path.join(save_dir, 'rewards_json'), exist_ok=True)
         os.makedirs(os.path.join(save_dir, 'model'), exist_ok=True)
         
         if not args.evaluate:
@@ -91,8 +91,10 @@ def main():
 
         num_videos = len(dataset.keys())
         if 'tvsum' in file_name:
+            dataset_type = 'tvsum'
             dataset_json = '/data/project/rw/video_summarization/dataset/tvsum_splits.json'
         elif 'summe' in file_name:
+            dataset_type = 'summe'
             dataset_json = '/data/project/rw/video_summarization/dataset/summe_splits.json'
         else:
             raise NotImplementedError()
@@ -124,13 +126,13 @@ def main():
 
         if args.evaluate:
             print("Evaluate only")
-            weights_filepath = f'{save_dir}/model/best_model*.tar.pth'
-            weights_filename = os.path.join(weights_filename)
+            weights_filepath = f'{save_dir}/best_model*.tar.pth'
+            weights_filename = glob.glob(weights_filepath)
             assert len(weights_filename) != 0
-
+            weights_filename = weights_filename[0]
             print("Loading model:", weights_filename)
-            model = model.load_state_dict(torch.load(weights_filename, map_location=lambda storage, loc: storage))
-            val_fscore, df = evaluate(model, dataset, test_keys, use_gpu)
+            model.load_state_dict(torch.load(weights_filename, map_location=lambda storage, loc: storage))
+            val_fscore, df = evaluate(model, dataset, test_keys, use_gpu, dataset_type)
 
             if args.verbose:
                 table.append([i+1, file_name, "{:.1%}".format(val_fscore)])
@@ -179,19 +181,19 @@ def main():
             epoch_reward = np.mean([reward_writers[key][epoch] for key in train_keys])
             print("epoch {}/{}\t reward {}\t".format(epoch+1, args.max_epoch, epoch_reward))
 
-            val_fscore = evaluate(model, dataset, test_keys, use_gpu)
+            val_fscore = evaluate(model, dataset, test_keys, use_gpu, dataset_type)
 
             if max_val_fscore < val_fscore:
                 max_val_fscore = val_fscore
                 max_val_fscore_epoch = epoch
             print('   Test F-score avg/max: {0:0.5}/{1:0.5}'.format(val_fscore, max_val_fscore))
 
-            model_state_dict = model.module.state_dict() if use_gpu else model.state_dict()
-            model_save_path = osp.join(save_dir, model, f'epoch{epoch}_{val_fscore}.pth.tar')
+            model_state_dict = model.state_dict()
+            model_save_path = osp.join(save_dir, 'model', f'epoch{epoch}_{val_fscore}.pth.tar')
             save_checkpoint(model_state_dict, model_save_path)
             print("Model saved to {}".format(model_save_path))
             
-            write_json(reward_writers, osp.join(save_dir, 'rewards_json', f'epoch{epoch}_rewards.json'))
+        write_json(reward_writers, osp.join(save_dir, f'rewards.json'))
 
         elapsed = round(time.time() - start_time)
         elapsed = str(datetime.timedelta(seconds=elapsed))
@@ -206,14 +208,12 @@ def main():
         print(tabulate(table))
 
 
-def evaluate(model, dataset, test_keys, use_gpu):
+def evaluate(model, dataset, test_keys, use_gpu, dataset_type):
     print("==> Test")
     with torch.no_grad():
         model.eval()
         fms = []
-        eval_metric = 'avg' if args.metric == 'tvsum' else 'max'
-
-        if args.verbose: table = [["No.", "Video", "F-score"]]
+        eval_metric = 'avg' if dataset_type == 'tvsum' else 'max'
 
         # if args.save_results:
             # h5_res = h5py.File(osp.join(save_dir, 'result.h5'), 'w')
@@ -243,7 +243,7 @@ def evaluate(model, dataset, test_keys, use_gpu):
                 fm, _, _ = vsum_tools.evaluate_summary(machine_summary, user_summary[user_id], eval_metric)
                 f_scores.append(fm)
                 if args.evaluate:
-                    coverage = coverage_count(video_name, user_id, machine_summary, user_summary[user_id], video_boundary, sum_ratio[user_id])
+                    coverage = vsum_tools.coverage_count(key, user_id, machine_summary, user_summary[user_id], video_boundary, sum_ratio[user_id])
                     df = df.append(coverage, ignore_index=True)
             
             if eval_metric == 'avg':
